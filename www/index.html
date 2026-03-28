@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Latse</title>
+
+    <link rel="manifest" href="./manifest.json">
+    <link rel="apple-touch-icon" href="./icon-512.png">
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#ffffff">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: { 500: '#2563eb', 600: '#1d4ed8' },
+                        slate: { 850: '#1e293b' }
+                    },
+                    spacing: { 'safe-top': 'env(safe-area-inset-top)', 'safe-bottom': 'env(safe-area-inset-bottom)' },
+                    animation: {
+                        'fade-in': 'fadeIn 0.3s ease-out',
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'scan': 'scan 2s ease-in-out infinite'
+                    },
+                    keyframes: {
+                        fadeIn: { '0%': { opacity: 0 }, '100%': { opacity: 1 } },
+                        scan: {
+                            '0%, 100%': { transform: 'translateY(-100%)' },
+                            '50%': { transform: 'translateY(100%)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        /* ADDED: Lock the body to exact dynamic height and prevent bounce scrolling */
+        html,
+        body {
+            height: 100dvh;
+            width: 100%;
+            overflow: hidden;
+            background-color: #f1f5f9;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        #root {
+            height: 100%;
+            width: 100%;
+        }
+
+        .hide-scroll::-webkit-scrollbar {
+            display: none;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .leaflet-container {
+            background: #cbd5e1;
+            z-index: 0;
+        }
+
+        .pin-marker {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 3px solid white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s;
+        }
+
+        .pin-marker:active {
+            transform: scale(1.3);
+        }
+
+        .user-marker {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: #3b82f6;
+            border: 3px solid white;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3), 0 4px 6px rgba(0, 0, 0, 0.3);
+            animation: pulse-ring 2s infinite;
+        }
+
+        @keyframes pulse-ring {
+            0% {
+                box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+            }
+        }
+
+        @keyframes sos-flash {
+
+            0%,
+            100% {
+                background: #000;
+            }
+
+            50% {
+                background: #fff;
+            }
+        }
+
+        .strobe-mode {
+            animation: sos-flash 0.2s infinite;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- 0. ERROR BOUNDARY ---
+        class ErrorBoundary extends React.Component {
+            constructor(props) {
+                super(props);
+                this.state = { hasError: false, error: null, info: null };
+            }
+            static getDerivedStateFromError(error) {
+                return { hasError: true, error };
+            }
+            componentDidCatch(error, info) {
+                console.error("App Crashed:", error, info);
+                this.setState({ info });
+            }
+            render() {
+                if (this.state.hasError) {
+                    return (
+                        <div className="p-8 text-slate-800 flex flex-col items-center justify-center min-h-screen bg-slate-50">
+                            <div className="bg-white p-6 rounded-2xl border border-red-200 shadow-xl w-full max-w-md">
+                                <h2 className="text-xl font-bold text-red-600 mb-2">Something went wrong</h2>
+                                <p className="text-sm font-mono bg-slate-100 p-3 rounded text-slate-600 break-words">{this.state.error?.toString()}</p>
+                                <button onClick={() => window.location.reload()} className="mt-4 w-full bg-slate-900 text-white font-bold py-3 rounded-xl">Reload App</button>
+                            </div>
+                        </div>
+                    );
+                }
+                return this.props.children;
+            }
+        }
+
+        // --- 1. DATA STORE ---
+        const DB = {
+            trails: {
+                ebc: {
+                    id: 'ebc', name: 'Everest Base Camp', center: [27.9300, 86.8000], zoom: 10,
+                    stats: { dist: '130km', gain: '2500m', days: 14 }
+                },
+                abc: {
+                    id: 'abc', name: 'Annapurna Base Camp', center: [28.4500, 83.9000], zoom: 10,
+                    stats: { dist: '80km', gain: '2000m', days: 10 }
+                },
+                langtang: {
+                    id: 'langtang', name: 'Langtang Valley', center: [28.1800, 85.5500], zoom: 10,
+                    stats: { dist: '65km', gain: '1500m', days: 8 }
+                }
+            },
+            markers: {
+                ebc: [
+                    { lat: 27.6869, lng: 86.7314, type: 'start', name: 'Lukla Airport' },
+                    { lat: 27.8068, lng: 86.7139, type: 'town', name: 'Namche Bazaar' },
+                    { lat: 27.8932, lng: 86.8203, type: 'medical', name: 'Pheriche Aid Post' },
+                    { lat: 27.9500, lng: 86.8300, type: 'danger', name: 'High Risk Zone' },
+                    { lat: 28.0026, lng: 86.8528, type: 'goal', name: 'Everest Base Camp' }
+                ],
+                abc: [{ lat: 28.2970, lng: 83.7845, type: 'start', name: 'Nayapul' }, { lat: 28.4194, lng: 83.8164, type: 'town', name: 'Chhomrong' }, { lat: 28.5300, lng: 83.8780, type: 'goal', name: 'Annapurna Base Camp' }],
+                langtang: [{ lat: 28.1462, lng: 85.3370, type: 'start', name: 'Syabrubesi' }, { lat: 28.2115, lng: 85.5663, type: 'goal', name: 'Kyanjin Gompa' }]
+            }
+        };
+
+        const INITIAL_CHECKLIST = {
+            'TIMS Permit / National Park Entry': true,
+            'Adequate Travel Insurance (Heli Rescue)': false,
+            'Itinerary Shared with Family': true,
+            'Broken-in Hiking Boots': false,
+            '30-40L Comfortable Daypack': true,
+            '3-Layer Clothing System (Base, Fleece, Shell)': false,
+            'Sleeping Bag (-10°C to -20°C rating)': false,
+            'Trekking Poles': true,
+            'Headlamp with Extra Batteries': false,
+            'UV Protection Sunglasses': true,
+            'Blister Tape & Plasters': false,
+            'Antiseptic Wipes & Bandages': true,
+            'Water Purification Tablets / Filter': false,
+            'Personal Medications & Rehydration Salts': false,
+            'Emergency Blanket & Whistle': true,
+            'Power Bank (10,000mAh+)': false,
+            'Offline Maps Downloaded': true,
+            'Cash (NPR) for Tea Houses': false
+        };
+
+        // --- HELPER FUNCTIONS ---
+        const calculateDistance = (lat1, lon1, lat2, lon2) => {
+            if (!lat1 || !lon1 || !lat2 || !lon2) return "0.0";
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return (R * c).toFixed(1);
+        };
+
+        const calculateEffectiveO2 = (altitudeMeters) => {
+            if (!altitudeMeters || altitudeMeters < 0) return 100;
+            return Math.round(100 * Math.exp(-altitudeMeters / 8400));
+        };
+
+        // --- 2. COMPONENTS ---
+
+        const Icon = ({ name, size = 24, className = "" }) => {
+            const containerRef = useRef(null);
+
+            useEffect(() => {
+                if (window.lucide && containerRef.current) {
+                    try {
+                        containerRef.current.innerHTML = `<i data-lucide="${name}" width="${size}" height="${size}" class="${className}"></i>`;
+                        window.lucide.createIcons({ root: containerRef.current });
+                    } catch (e) {
+                        console.error("Icon load error:", e);
+                    }
+                }
+            }, [name, size, className]);
+
+            return <span ref={containerRef} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}></span>;
+        };
+
+        // --- 3. VIEWS ---
+
+        const MapView = ({ trailId, setTrailId, userLocation }) => {
+            const mapRef = useRef(null);
+            const containerRef = useRef(null);
+            const userMarkerRef = useRef(null);
+
+            useEffect(() => {
+                if (!containerRef.current) return;
+
+                if (!mapRef.current && window.L) {
+                    mapRef.current = L.map(containerRef.current, { zoomControl: false }).setView(DB.trails[trailId].center, DB.trails[trailId].zoom);
+
+                    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                        attribution: '&copy; OpenStreetMap &copy; CARTO',
+                        maxZoom: 20
+                    }).addTo(mapRef.current);
+                }
+
+                if (mapRef.current) {
+                    mapRef.current.eachLayer(layer => {
+                        if (layer instanceof L.Marker && layer !== userMarkerRef.current) mapRef.current.removeLayer(layer);
+                    });
+
+                    const trailMarkers = DB.markers[trailId] || [];
+                    trailMarkers.forEach(m => {
+                        let color = m.type === 'start' ? '#10b981' : m.type === 'goal' ? '#f59e0b' : m.type === 'medical' ? '#ef4444' : '#3b82f6';
+                        const icon = L.divIcon({
+                            className: 'custom-pin',
+                            html: `<div class="pin-marker" style="background-color: ${color};"></div>`,
+                            iconSize: [18, 18],
+                            iconAnchor: [9, 9]
+                        });
+                        L.marker([m.lat, m.lng], { icon }).addTo(mapRef.current).bindPopup(m.name);
+                    });
+
+                    mapRef.current.flyTo(DB.trails[trailId].center, DB.trails[trailId].zoom);
+                }
+            }, [trailId]);
+
+            useEffect(() => {
+                if (userLocation && mapRef.current && window.L) {
+                    if (userMarkerRef.current) {
+                        userMarkerRef.current.setLatLng(userLocation);
+                    } else {
+                        const userIcon = L.divIcon({
+                            className: 'custom-pin',
+                            html: `<div class="user-marker"></div>`,
+                            iconSize: [20, 20],
+                            iconAnchor: [10, 10]
+                        });
+                        userMarkerRef.current = L.marker(userLocation, { icon: userIcon }).addTo(mapRef.current).bindPopup("Your Location");
+                    }
+                }
+            }, [userLocation]);
+
+            const centerOnUser = () => {
+                if (userLocation && mapRef.current) {
+                    mapRef.current.flyTo(userLocation, 14);
+                } else {
+                    alert("Location not available. Ensure GPS is enabled.");
+                }
+            };
+
+            return (
+                <div className="h-full w-full relative">
+                    <div ref={containerRef} className="h-full w-full bg-slate-200"></div>
+
+                    <div className="absolute top-4 left-0 right-0 flex justify-center z-[500]">
+                        <div className="bg-white rounded-full shadow-lg p-1 flex gap-1">
+                            {Object.values(DB.trails).map(t => (
+                                <button key={t.id} onClick={() => setTrailId(t.id)} className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${trailId === t.id ? 'bg-slate-900 text-white' : 'text-slate-600'}`}>{t.name}</button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <button
+                        onClick={centerOnUser}
+                        className="absolute bottom-28 right-4 bg-white p-3 rounded-full shadow-lg z-[500] text-slate-700 active:scale-95 border border-slate-100">
+                        <Icon name="navigation" size={20} />
+                    </button>
+                </div>
+            );
+        };
+
+        const Dashboard = ({ trailId, setView, metrics, readinessScore }) => {
+            const trail = DB.trails[trailId];
+
+            return (
+                <div className="p-6 pb-24 space-y-6 animate-fade-in">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Current Trek</div>
+                            <h1 className="text-3xl font-bold text-slate-900 leading-none">{trail.name}</h1>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={() => setView('emergency')} className="bg-red-50 p-2 rounded-full border border-red-100 shadow-sm active:scale-95 transition-transform">
+                                <Icon name="phone-call" size={20} className="text-red-600" />
+                            </button>
+                        </div>
+                    </div>
+
+                    <a href="https://github.com/REinstall-SyS/Latse/releases/download/V1.0.0/app-release.apk"
+                        download
+                        className="flex items-center justify-between bg-emerald-600 p-4 rounded-2xl shadow-lg active:scale-95 transition-transform text-white w-full border-b-4 border-emerald-800">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-white/20 p-2 rounded-xl">
+                                <Icon name="download" size={24} />
+                            </div>
+                            <div className="text-left">
+                                <div className="font-bold text-sm">Get the Native Android App</div>
+                                <div className="text-emerald-200 text-xs">For reliable offline tracking</div>
+                            </div>
+                        </div>
+                        <Icon name="chevron-right" size={20} className="text-emerald-200" />
+                    </a>
+
+                    <div className="bg-slate-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
+                        <div className="absolute -right-4 -top-4 opacity-10"><Icon name="mountain" size={150} /></div>
+                        <div className="relative z-10">
+                            <div className="flex items-center gap-2 mb-6">
+                                <span className="bg-blue-500/20 text-blue-400 text-[10px] font-bold px-2 py-1 rounded border border-blue-500/30">GPS ACTIVE</span>
+                                <span className="text-slate-400 text-xs ml-2">Live Environment Data</span>
+                            </div>
+                            <div className="flex items-baseline gap-1">
+                                <span className="text-5xl font-bold tracking-tight">{metrics.alt}</span>
+                                <span className="text-xl text-slate-400">m</span>
+                            </div>
+                            <div className="text-sm text-slate-400 mt-1">Current Real Altitude</div>
+
+                            <div className="grid grid-cols-3 gap-2 mt-6 pt-6 border-t border-slate-700">
+                                <div><div className="text-xs text-slate-500">TEMP</div><div className="font-bold">{metrics.temp}°C</div></div>
+                                <div><div className="text-xs text-slate-500">WIND</div><div className="font-bold">{metrics.wind} km/h</div></div>
+                                <div>
+                                    <div className="text-xs text-slate-500">ATM. O2</div>
+                                    <div className={`font-bold ${metrics.effO2 < 80 ? 'text-orange-400' : 'text-emerald-400'}`}>
+                                        {metrics.effO2}%
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <button onClick={() => setView('weather')} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm text-left active:scale-95 transition-transform">
+                            <div className="flex items-center gap-2 mb-2">
+                                <div className="p-2 bg-blue-50 rounded-lg">
+                                    <Icon name="cloud-sun" size={20} className="text-blue-600" />
+                                </div>
+                            </div>
+                            <div className="text-slate-400 text-xs font-bold uppercase mb-1">Forecast</div>
+                            <div className="text-xl font-bold text-slate-900">Weather</div>
+                        </button>
+
+                        <button onClick={() => setView('readiness')} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm text-left active:scale-95 transition-transform">
+                            <div className="flex items-center gap-2 mb-2">
+                                <div className="p-2 bg-emerald-50 rounded-lg">
+                                    <Icon name="shield-check" size={20} className="text-emerald-600" />
+                                </div>
+                            </div>
+                            <div className="text-slate-400 text-xs font-bold uppercase mb-1">Readiness</div>
+                            <div className="text-xl font-bold text-emerald-600">{readinessScore}%</div>
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                            <div className="text-slate-400 text-xs font-bold uppercase mb-1">Real Distance</div>
+                            <div className="text-xl font-bold text-slate-900">{metrics.dist} km</div>
+                        </div>
+                        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                            <div className="text-slate-400 text-xs font-bold uppercase mb-1">Total Trail</div>
+                            <div className="text-xl font-bold text-slate-900">{trail.stats.dist}</div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const EmergencyInfo = () => {
+            return (
+                <div className="p-6 pb-24 animate-fade-in">
+                    <h1 className="text-2xl font-bold mb-6 text-red-600 flex items-center gap-2">
+                        <Icon name="phone-call" size={24} /> Emergency Contacts
+                    </h1>
+
+                    <div className="bg-white rounded-2xl p-5 border border-red-100 shadow-sm mb-4">
+                        <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                            <Icon name="shield-alert" size={18} className="text-red-500" /> Official Services
+                        </h3>
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <span className="block font-bold text-slate-900">Tourist Police</span>
+                                    <span className="text-xs text-slate-500">English speaking, tourist aid</span>
+                                </div>
+                                <a href="tel:1144" className="bg-red-50 text-red-600 px-4 py-2 rounded-xl font-bold active:bg-red-100 flex items-center gap-2">
+                                    <Icon name="phone" size={14} /> 1144
+                                </a>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <span className="block font-bold text-slate-900">Nepal Police</span>
+                                    <span className="text-xs text-slate-500">General emergency</span>
+                                </div>
+                                <a href="tel:100" className="bg-slate-100 text-slate-700 px-4 py-2 rounded-xl font-bold active:bg-slate-200 flex items-center gap-2">
+                                    <Icon name="phone" size={14} /> 100
+                                </a>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <span className="block font-bold text-slate-900">Ambulance</span>
+                                    <span className="text-xs text-slate-500">Medical transport</span>
+                                </div>
+                                <a href="tel:102" className="bg-slate-100 text-slate-700 px-4 py-2 rounded-xl font-bold active:bg-slate-200 flex items-center gap-2">
+                                    <Icon name="phone" size={14} /> 102
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-orange-50 rounded-2xl p-5 border border-orange-100 shadow-sm mb-4">
+                        <h3 className="font-bold text-orange-900 mb-2 flex items-center gap-2">
+                            <Icon name="helicopter" size={18} /> Heli Rescue Protocol
+                        </h3>
+                        <p className="text-sm text-orange-800 leading-relaxed">
+                            Do not call a helicopter directly unless authorized by your insurance or facing immediate life-threatening danger. Always contact your <strong>Trekking Agency</strong> or <strong>Insurance Provider</strong> first to guarantee payment; otherwise, rescue dispatch may be heavily delayed.
+                        </p>
+                    </div>
+
+                    <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+                        <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                            <Icon name="passport" size={18} className="text-brand-600" /> Trail Documentation
+                        </h3>
+                        <div className="space-y-3 text-sm text-slate-600 leading-relaxed">
+                            <p>Keep your <strong>TIMS card number</strong> and <strong>Passport</strong> accessible at all times.</p>
+                            <p>In the event of a major natural disaster (earthquake, landslide), prioritize contacting your home country's embassy in Kathmandu immediately after securing safety.</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const SafetyCheck = ({ setView }) => {
+            const [status, setStatus] = useState('input');
+            const [result, setResult] = useState(null);
+            const [showInfo, setShowInfo] = useState(false);
+
+            const [scores, setScores] = useState({
+                headache: 0, gi: 0, fatigue: 0, dizziness: 0, sleep: 0
+            });
+
+            const [critical, setCritical] = useState({
+                breath: false, cough: false, ataxia: false, confusion: false
+            });
+
+            const questions = [
+                { id: 'headache', title: 'Headache', options: ['None', 'Mild', 'Moderate', 'Severe / Incapacitating'] },
+                { id: 'gi', title: 'Gastrointestinal', options: ['Good appetite', 'Poor appetite / Nausea', 'Moderate nausea / Vomiting', 'Severe vomiting'] },
+                { id: 'fatigue', title: 'Fatigue & Weakness', options: ['Not tired', 'Mildly tired', 'Moderately tired', 'Severely tired'] },
+                { id: 'dizziness', title: 'Dizziness / Lightheaded', options: ['None', 'Mild', 'Moderate', 'Severe / Incapacitating'] },
+                { id: 'sleep', title: 'Difficulty Sleeping', options: ['Slept normally', 'Not as well as usual', 'Woke many times', 'Could not sleep at all'] }
+            ];
+
+            const handleScoreChange = (id, val) => setScores(prev => ({ ...prev, [id]: val }));
+            const handleCriticalChange = (id) => setCritical(prev => ({ ...prev, [id]: !prev[id] }));
+
+            const resetAssessment = () => {
+                setScores({ headache: 0, gi: 0, fatigue: 0, dizziness: 0, sleep: 0 });
+                setCritical({ breath: false, cough: false, ataxia: false, confusion: false });
+                setResult(null);
+                setStatus('input');
+            };
+
+            const analyze = (e) => {
+                e.preventDefault();
+                setStatus('loading');
+
+                const total = scores.headache + scores.gi + scores.fatigue + scores.dizziness + scores.sleep;
+                const hasHeadache = scores.headache > 0;
+                const hasCritical = critical.breath || critical.cough || critical.ataxia || critical.confusion;
+
+                let uiLevel = 'Green', title = 'No AMS', summary = `Lake Louise Score: ${total}. You do not meet the criteria for Acute Mountain Sickness.`;
+                let guidelines = ['Continue your trek safely.', 'Maintain a slow, steady walking pace.', 'Drink 3-4 liters of water daily.'];
+
+                if (hasCritical) {
+                    uiLevel = 'Red'; title = 'CRITICAL EMERGENCY'; summary = `You have logged symptoms indicating High Altitude Pulmonary/Cerebral Edema (HAPE/HACE). This is a life-threatening emergency.`;
+                    guidelines = ['DESCEND IMMEDIATELY. Drop at least 1000m in elevation.', 'Do not wait. Evacuate even at night if necessary.', 'Administer supplemental oxygen if available.', 'Keep the affected person warm; they should not walk unassisted.'];
+                } else if (total >= 3 && hasHeadache) {
+                    if (total <= 5) {
+                        uiLevel = 'Amber'; title = 'Mild AMS'; summary = `Lake Louise Score: ${total}. You are showing signs of Mild Acute Mountain Sickness.`;
+                        guidelines = ['STOP ASCENT. Do not go any higher today.', 'Rest at your current altitude.', 'Hydrate and monitor symptoms. If they worsen, you must descend.', 'Consider standard pain relief (e.g., Ibuprofen) for headache.'];
+                    } else {
+                        uiLevel = 'Red'; title = 'Moderate-Severe AMS'; summary = `Lake Louise Score: ${total}. Your symptoms indicate Moderate to Severe Acute Mountain Sickness.`;
+                        guidelines = ['DESCEND IMMEDIATELY. Drop at least 500-1000m in elevation.', 'Do not wait for morning or for symptoms to improve.', 'Do not descend alone. Ask your guide or team for assistance.', 'Consider medical intervention or emergency evacuation if symptoms do not improve upon descent.'];
+                    }
+                } else if (total >= 3 && !hasHeadache) {
+                    uiLevel = 'Amber'; title = 'Monitor Symptoms'; summary = `Lake Louise Score: ${total}. While you don't officially have AMS (no headache), your other symptoms require caution.`;
+                    guidelines = ['Pace yourself and take extra rest today.', 'Stay hydrated and eat well.', 'If a headache develops, treat this as AMS and stop ascending.'];
+                }
+
+                setTimeout(() => {
+                    setResult({ level: uiLevel, title, summary, guidelines });
+                    setStatus('result');
+                }, 1500);
+            };
+
+            if (status === 'input') return (
+                <div className="p-6 pb-24 animate-fade-in relative">
+                    <div className="flex flex-col items-start mb-6">
+                        <h1 className="text-2xl font-bold mb-3 text-slate-900">Altitude Health Check</h1>
+                        <div className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full border border-blue-200 cursor-pointer active:scale-95 transition-transform shadow-sm" onClick={() => setShowInfo(true)}>
+                            <Icon name="check-circle" size={14} />
+                            <span className="text-[10px] font-bold uppercase tracking-wide">Lake Louise Score (ISMM Standard)</span>
+                            <Icon name="info" size={14} className="ml-1 opacity-70" />
+                        </div>
+                    </div>
+
+                    <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200 shadow-sm mb-6 flex items-start gap-3">
+                        <Icon name="alert-triangle" size={20} className="text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                            <h4 className="font-bold text-amber-900 text-sm mb-1">Golden Rule</h4>
+                            <p className="text-xs text-amber-800 font-medium">If you feel unwell, assume it is altitude sickness.</p>
+                        </div>
+                    </div>
+
+                    {showInfo && (
+                        <div className="fixed inset-0 z-[9999] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in" onClick={() => setShowInfo(false)}>
+                            <div className="bg-white rounded-2xl p-6 shadow-2xl max-w-sm w-full relative" onClick={e => e.stopPropagation()}>
+                                <button onClick={() => setShowInfo(false)} className="absolute top-4 right-4 text-slate-400 p-1 active:scale-90 transition-transform"><Icon name="x" size={20} /></button>
+                                <h3 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2"><Icon name="activity" size={20} className="text-brand-600" /> What is the LLS?</h3>
+                                <p className="text-sm text-slate-600 leading-relaxed mb-4">The Lake Louise Score (LLS) is the globally recognized clinical standard created by the International Society for Mountain Medicine (ISMM). It diagnoses Acute Mountain Sickness (AMS) based on self-reported symptoms.</p>
+                                <p className="text-sm text-slate-600 leading-relaxed font-medium bg-slate-50 p-3 rounded-lg border border-slate-100">A total score of 3 or higher, with a headache present, officially indicates AMS.</p>
+                            </div>
+                        </div>
+                    )}
+
+                    <form onSubmit={analyze} className="space-y-6">
+                        {questions.map((q) => (
+                            <div key={q.id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                                <h3 className="font-bold text-slate-900 mb-4">{q.title}</h3>
+                                <div className="flex flex-col gap-3">
+                                    {q.options.map((opt, idx) => (
+                                        <label key={idx} className="relative block">
+                                            <input type="radio" name={q.id} value={idx} checked={scores[q.id] === idx} onChange={() => handleScoreChange(q.id, idx)} className="peer sr-only" />
+                                            <div className="flex items-center p-4 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-medium text-sm transition-all peer-checked:bg-brand-600 peer-checked:text-white peer-checked:border-brand-600 peer-checked:shadow-lg cursor-pointer active:scale-[0.98]">
+                                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-white text-slate-400 border border-slate-200 peer-checked:border-transparent peer-checked:bg-white/20 peer-checked:text-white flex items-center justify-center font-bold mr-3 transition-colors shadow-sm">{idx}</div>
+                                                {opt}
+                                            </div>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+
+                        <div className="bg-red-50 p-5 rounded-2xl border border-red-100 shadow-sm mt-6">
+                            <h3 className="font-bold text-red-900 mb-4 flex items-center gap-2"><Icon name="alert-octagon" size={20} /> Red Flag Symptoms</h3>
+                            <p className="text-xs text-red-700 mb-4 font-medium">Check any that apply to check for severe conditions (HAPE/HACE):</p>
+                            <div className="flex flex-col gap-3">
+                                <label className="flex items-center gap-3 cursor-pointer p-3 bg-white rounded-xl border border-red-200">
+                                    <input type="checkbox" checked={critical.breath} onChange={() => handleCriticalChange('breath')} className="w-5 h-5 accent-red-600" />
+                                    <span className="text-sm font-medium text-red-900">Shortness of breath while resting</span>
+                                </label>
+                                <label className="flex items-center gap-3 cursor-pointer p-3 bg-white rounded-xl border border-red-200">
+                                    <input type="checkbox" checked={critical.cough} onChange={() => handleCriticalChange('cough')} className="w-5 h-5 accent-red-600" />
+                                    <span className="text-sm font-medium text-red-900">Coughing up pink or frothy liquid</span>
+                                </label>
+                                <label className="flex items-center gap-3 cursor-pointer p-3 bg-white rounded-xl border border-red-200">
+                                    <input type="checkbox" checked={critical.ataxia} onChange={() => handleCriticalChange('ataxia')} className="w-5 h-5 accent-red-600" />
+                                    <span className="text-sm font-medium text-red-900">Loss of coordination / staggering walk</span>
+                                </label>
+                                <label className="flex items-center gap-3 cursor-pointer p-3 bg-white rounded-xl border border-red-200">
+                                    <input type="checkbox" checked={critical.confusion} onChange={() => handleCriticalChange('confusion')} className="w-5 h-5 accent-red-600" />
+                                    <span className="text-sm font-medium text-red-900">Severe confusion or altered mental state</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <button type="submit" className="w-full bg-brand-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-200 active:scale-95 transition-transform mt-4">
+                            Calculate Clinical Score
+                        </button>
+                    </form>
+                </div>
+            );
+
+            if (status === 'loading') return (
+                <div className="h-full flex flex-col items-center justify-center p-6">
+                    <div className="w-16 h-16 border-4 border-slate-200 border-t-brand-600 rounded-full animate-spin mb-6"></div>
+                    <div className="text-slate-900 font-bold text-lg mb-2">Analyzing Symptoms</div>
+                    <div className="text-slate-500 text-sm text-center">Applying Lake Louise Scoring criteria...</div>
+                </div>
+            );
+
+            const colors = result.level === 'Red' ? 'bg-red-50 text-red-600 border-red-200' : result.level === 'Amber' ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200';
+            const iconName = result.level === 'Green' ? 'check' : 'alert-triangle';
+
+            return (
+                <div className="p-6 h-full flex flex-col items-center justify-center text-center animate-fade-in overflow-y-auto">
+                    <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-6 border-4 shrink-0 mt-8 shadow-sm ${colors}`}>
+                        <Icon name={iconName} size={48} />
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-900 mb-3">{result.title}</h2>
+                    <p className="text-slate-600 text-sm leading-relaxed mb-6 max-w-sm">{result.summary}</p>
+
+                    {result.guidelines && result.guidelines.length > 0 && (
+                        <div className="w-full max-w-xs bg-white rounded-xl border border-slate-100 p-4 mb-6 text-left shadow-sm">
+                            <h4 className="font-bold text-slate-900 text-sm mb-3 uppercase tracking-wider flex items-center gap-2"><Icon name="clipboard-list" size={16} className="text-brand-600" /> Action Plan</h4>
+                            <ul className="space-y-3">
+                                {result.guidelines.map((step, idx) => (
+                                    <li key={idx} className="flex items-start gap-2 text-sm text-slate-700 font-medium"><div className="w-1.5 h-1.5 rounded-full bg-brand-500 mt-1.5 shrink-0"></div>{step}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
+                    <div className="w-full max-w-xs bg-slate-100 p-3 rounded-xl mb-8 text-xs text-slate-500 text-left border border-slate-200">
+                        <strong>⚠️ Disclaimer:</strong> This assessment tool follows ISMM guidelines but is not a substitute for professional medical advice. Always trust how you feel.
+                    </div>
+
+                    <button type="button" onClick={resetAssessment} className="w-full max-w-xs bg-slate-900 text-white font-bold py-4 rounded-xl active:scale-95 transition-transform mb-8">
+                        Start New Assessment
+                    </button>
+                </div>
+            );
+        };
+
+        const Readiness = ({ score, setScore, answers, setAnswers, checklist, setChecklist }) => {
+            const [mode, setMode] = useState('quiz');
+
+            const questions = [
+                { id: 1, cat: 'Physical Preparation', q: "Are you comfortable walking 4-6 hours a day with a light daypack?" },
+                { id: 2, cat: 'Physical Preparation', q: "Have you broken in your hiking boots on multiple long walks?" },
+                { id: 3, cat: 'Knowledge', q: "Are you aware of the signs of Altitude Mountain Sickness (AMS)?" },
+                { id: 4, cat: 'Knowledge', q: "Do you know to pace yourself and stay hydrated on the trail?" },
+                { id: 5, cat: 'Safety', q: "Do you have a personal first-aid kit prepared for the trip?" },
+                { id: 6, cat: 'Safety', q: "Have you shared your itinerary and emergency contacts with someone back home?" },
+                { id: 7, cat: 'Gear & Environment', q: "Are you prepared for sudden weather changes (rain/cold) with proper layers?" },
+                { id: 8, cat: 'Logistics', q: "Do you have adequate travel insurance that covers altitude trekking?" }
+            ];
+
+            const handleAnswer = (qId, value) => {
+                const newAnswers = { ...answers, [qId]: value };
+                setAnswers(newAnswers);
+                const yesCount = Object.values(newAnswers).filter(Boolean).length;
+                setScore(Math.round((yesCount / questions.length) * 100));
+            };
+
+            return (
+                <div className="p-6 pb-24 animate-fade-in">
+                    <div className="flex bg-slate-200 p-1 rounded-xl mb-6">
+                        <button onClick={() => setMode('quiz')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${mode === 'quiz' ? 'bg-white shadow-sm' : 'text-slate-500'}`}>Assessment</button>
+                        <button onClick={() => setMode('check')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${mode === 'check' ? 'bg-white shadow-sm' : 'text-slate-500'}`}>Gear & Safety Checklist</button>
+                    </div>
+
+                    {mode === 'quiz' ? (
+                        <>
+                            <h1 className="text-2xl font-bold mb-4">Readiness Audit</h1>
+                            <p className="text-slate-500 text-sm mb-6">A quick check to ensure you are prepared for the realities of the trail.</p>
+                            <div className="space-y-4 mb-6">
+                                {questions.map(q => (
+                                    <div key={q.id} className="bg-white p-4 rounded-xl border border-slate-100">
+                                        <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">{q.cat}</div>
+                                        <p className="font-medium text-slate-900 mb-3 text-sm">{q.q}</p>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => handleAnswer(q.id, true)} className={`flex-1 py-2 rounded-lg font-bold border text-xs transition-colors ${answers[q.id] === true ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200'}`}>Yes</button>
+                                            <button onClick={() => handleAnswer(q.id, false)} className={`flex-1 py-2 rounded-lg font-bold border text-xs transition-colors ${answers[q.id] === false ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200'}`}>No</button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="sticky bottom-20 bg-slate-900 text-white p-4 rounded-xl shadow-lg flex justify-between items-center">
+                                <span className="font-bold">Preparation Score</span>
+                                <span className="text-2xl font-bold text-emerald-400">{score}%</span>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <h1 className="text-2xl font-bold mb-4">Essential Packing List</h1>
+                            <div className="space-y-3">
+                                {Object.entries(checklist).map(([item, checked]) => (
+                                    <div key={item} onClick={() => setChecklist({ ...checklist, [item]: !checked })} className="flex items-center gap-3 p-4 bg-white rounded-xl border border-slate-100 cursor-pointer active:scale-95 transition-transform">
+                                        <div className={`w-6 h-6 rounded border-2 flex items-center justify-center shrink-0 ${checked ? 'bg-brand-600 border-brand-600 text-white' : 'border-slate-300'}`}>
+                                            {checked && <Icon name="check" size={14} />}
+                                        </div>
+                                        <span className={`text-sm font-medium ${checked ? 'text-slate-400 line-through' : 'text-slate-900'}`}>{item}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
+                </div>
+            );
+        };
+
+        const PaceCalculator = ({ setView }) => {
+            const [dist, setDist] = useState(5);
+            const [elev, setElev] = useState(300);
+
+            const timeHours = (Number(dist) / 5) + (Number(elev) / 600);
+            const hrs = Math.floor(timeHours);
+            const mins = Math.round((timeHours - hrs) * 60);
+
+            return (
+                <div>
+                    <button onClick={() => setView('grid')} className="mb-4 text-slate-500 flex items-center gap-2 font-bold"><Icon name="arrow-left" size={16} /> Back</button>
+                    <h2 className="text-2xl font-bold mb-2">Pace Calculator</h2>
+                    <p className="text-slate-500 text-sm mb-6">Estimate hiking time based on Naismith's Rule.</p>
+
+                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-5">
+                        <div>
+                            <label className="text-sm font-bold text-slate-700 block mb-2">Distance Remaining (km)</label>
+                            <input type="number" min="0" step="0.5" value={dist} onChange={e => setDist(e.target.value)} className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 font-bold text-lg focus:outline-brand-500" />
+                        </div>
+                        <div>
+                            <label className="text-sm font-bold text-slate-700 block mb-2">Elevation Gain (m)</label>
+                            <input type="number" min="0" step="50" value={elev} onChange={e => setElev(e.target.value)} className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 font-bold text-lg focus:outline-brand-500" />
+                        </div>
+                        <div className="pt-6 border-t border-slate-100 flex justify-between items-center">
+                            <span className="font-bold text-slate-400 uppercase text-xs">Estimated Time</span>
+                            <span className="text-3xl font-black text-brand-600">{hrs}h {mins}m</span>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const Tools = () => {
+            const [strobe, setStrobe] = useState(false);
+            const [flashlight, setFlashlight] = useState(false);
+            const [torchTrack, setTorchTrack] = useState(null);
+            const [view, setView] = useState('grid');
+            const [heading, setHeading] = useState(0);
+
+            const CATEGORIES = {
+                "Emergency": [
+                    { en: "Help!", np: "Guhar!", sound: "goo-har" },
+                    { en: "Call a helicopter", np: "Helicopter bolaunuhos", sound: "he-li-cop-ter bo-lau-nu-hos" },
+                    { en: "I need a doctor", np: "Malai daktar chahiyo", sound: "ma-lai dak-tar cha-hi-yo" }
+                ],
+                "Trail Navigation": [
+                    { en: "How far is the next village?", np: "Arko gaun kati tada chha?", sound: "ar-ko gaun ka-ti ta-da cha" },
+                    { en: "Is this the right way?", np: "Ke yo sahi bato ho?", sound: "ke yo sa-hi ba-to ho" },
+                    { en: "Stop", np: "Roko", sound: "ro-ko" }
+                ],
+                "Food & Lodging": [
+                    { en: "Water", np: "Paani", sound: "paa-nee" },
+                    { en: "Food", np: "Khana", sound: "kha-na" },
+                    { en: "Do you have a room?", np: "Kotha khali chha?", sound: "ko-tha kha-li cha" }
+                ]
+            };
+
+            const speakText = (text) => {
+                if ('speechSynthesis' in window) {
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.lang = 'hi-IN';
+                    window.speechSynthesis.speak(utterance);
+                }
+            };
+
+            const toggleFlashlight = async () => {
+                if (flashlight) {
+                    if (torchTrack) {
+                        torchTrack.stop();
+                        setTorchTrack(null);
+                    }
+                    setFlashlight(false);
+                } else {
+                    setFlashlight(true);
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                        const track = stream.getVideoTracks()[0];
+                        const capabilities = track.getCapabilities();
+                        if (capabilities && capabilities.torch) {
+                            await track.applyConstraints({ advanced: [{ torch: true }] });
+                            setTorchTrack(track);
+                        } else {
+                            track.stop();
+                        }
+                    } catch (err) {
+                        console.warn("Hardware flashlight not available, using screen fallback.", err);
+                    }
+                }
+            };
+
+            const startCompass = async () => {
+                if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    try {
+                        const permission = await DeviceOrientationEvent.requestPermission();
+                        if (permission === 'granted') {
+                            setView('compass');
+                        } else {
+                            alert("Compass permission denied by user.");
+                        }
+                    } catch (e) {
+                        console.error(e);
+                        setView('compass');
+                    }
+                } else {
+                    setView('compass');
+                }
+            };
+
+            useEffect(() => {
+                let handler;
+                if (view === 'compass') {
+                    handler = (e) => {
+                        let h = null;
+                        if (e.webkitCompassHeading) {
+                            h = e.webkitCompassHeading;
+                        } else if (e.absolute !== false && e.alpha !== null) {
+                            h = 360 - e.alpha;
+                        }
+
+                        if (h !== null) setHeading(Math.round(h));
+                    };
+
+                    window.addEventListener('deviceorientationabsolute', handler, true);
+                    window.addEventListener('deviceorientation', handler, true);
+                }
+
+                return () => {
+                    if (handler) {
+                        window.removeEventListener('deviceorientationabsolute', handler, true);
+                        window.removeEventListener('deviceorientation', handler, true);
+                    }
+                };
+            }, [view]);
+
+            if (strobe) return <div onClick={() => setStrobe(false)} className="strobe-mode flex flex-col items-center justify-center cursor-pointer"><h1 className="text-6xl font-black text-black mix-blend-difference">SOS</h1><p className="text-black font-bold mt-4 mix-blend-difference">TAP TO STOP</p></div>;
+            if (flashlight) return <div onClick={toggleFlashlight} className="fixed inset-0 bg-white z-[9999] flex items-center justify-center cursor-pointer"><p className="text-slate-400 font-bold">TAP TO TURN OFF</p></div>;
+
+            return (
+                <div className="p-6 pb-24 animate-fade-in">
+                    <h1 className="text-2xl font-bold mb-6">Sherpa Toolkit</h1>
+
+                    {view === 'grid' && (
+                        <div className="grid grid-cols-2 gap-4">
+                            <button onClick={() => setStrobe(true)} className="aspect-square bg-red-50 border border-red-100 rounded-3xl flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform">
+                                <div className="p-3 bg-white rounded-full text-red-600 shadow-sm"><Icon name="zap" size={28} /></div>
+                                <span className="font-bold text-red-900 text-sm">SOS Strobe</span>
+                            </button>
+                            <button onClick={toggleFlashlight} className="aspect-square bg-yellow-50 border border-yellow-100 rounded-3xl flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform">
+                                <div className="p-3 bg-white rounded-full text-yellow-600 shadow-sm"><Icon name="flashlight" size={28} /></div>
+                                <span className="font-bold text-yellow-900 text-sm">Flashlight</span>
+                            </button>
+                            <button onClick={() => setView('phrases')} className="aspect-square bg-purple-50 border border-purple-100 rounded-3xl flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform">
+                                <div className="p-3 bg-white rounded-full text-purple-600 shadow-sm"><Icon name="languages" size={28} /></div>
+                                <span className="font-bold text-purple-900 text-sm">Translator</span>
+                            </button>
+                            <button onClick={startCompass} className="aspect-square bg-slate-800 border border-slate-900 rounded-3xl flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform">
+                                <div className="p-3 bg-white/10 rounded-full text-white shadow-sm"><Icon name="compass" size={28} /></div>
+                                <span className="font-bold text-white text-sm">Compass</span>
+                            </button>
+                            <button onClick={() => setView('pace')} className="aspect-square bg-emerald-50 border border-emerald-100 rounded-3xl flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform col-span-2">
+                                <div className="p-3 bg-white rounded-full text-emerald-600 shadow-sm"><Icon name="footprints" size={28} /></div>
+                                <span className="font-bold text-emerald-900 text-sm">Pace Calculator</span>
+                            </button>
+                        </div>
+                    )}
+
+                    {view === 'phrases' && (
+                        <div>
+                            <button onClick={() => setView('grid')} className="mb-4 text-slate-500 flex items-center gap-2 font-bold"><Icon name="arrow-left" size={16} /> Back</button>
+                            <div className="space-y-6">
+                                {Object.keys(CATEGORIES).map((cat) => (
+                                    <div key={cat}>
+                                        <h3 className="text-xs font-bold text-slate-400 uppercase mb-3">{cat}</h3>
+                                        <div className="space-y-3">
+                                            {CATEGORIES[cat].map((p, i) => (
+                                                <div key={i} className="bg-white p-4 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm">
+                                                    <div>
+                                                        <div className="font-bold text-slate-900">{p.en}</div>
+                                                        <div className="text-sm font-bold text-brand-600 mt-1">{p.np}</div>
+                                                        <div className="text-xs text-slate-400 italic mt-1">"{p.sound}"</div>
+                                                    </div>
+                                                    <button onClick={() => speakText(p.np)} className="p-3 bg-brand-50 rounded-full text-brand-600 active:bg-brand-100 transition-colors">
+                                                        <Icon name="volume-2" size={20} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {view === 'compass' && (
+                        <div className="flex flex-col items-center">
+                            <button onClick={() => setView('grid')} className="mb-8 w-full text-slate-500 flex items-center gap-2 font-bold"><Icon name="arrow-left" size={16} /> Back</button>
+                            <div className="w-64 h-64 rounded-full border-[8px] border-slate-800 bg-white relative flex items-center justify-center shadow-xl transition-transform duration-100" style={{ transform: `rotate(-${heading}deg)` }}>
+                                <div className="absolute top-4 font-black text-xl text-red-500">N</div>
+                                <div className="absolute bottom-4 font-black text-xl text-slate-400">S</div>
+                                <div className="absolute left-4 font-black text-xl text-slate-400">W</div>
+                                <div className="absolute right-4 font-black text-xl text-slate-400">E</div>
+                                <div className="w-1 h-32 bg-red-500 absolute top-4 rounded-full"></div>
+                                <div className="w-4 h-4 rounded-full bg-slate-800 z-10 border-2 border-white"></div>
+                            </div>
+                            <div className="mt-12 text-5xl font-black text-slate-900">{heading}°</div>
+                            <p className="mt-4 text-xs text-slate-400 text-center max-w-[200px]">Ensure your device supports and has enabled motion orientation.</p>
+                        </div>
+                    )}
+
+                    {view === 'pace' && (
+                        <PaceCalculator setView={setView} />
+                    )}
+                </div>
+            );
+        };
+
+        const WeatherView = ({ trailId, userLocation }) => {
+            const [forecast, setForecast] = useState(null);
+
+            useEffect(() => {
+                const [lat, lng] = (userLocation && userLocation.length === 2)
+                    ? userLocation
+                    : DB.trails[trailId].center;
+
+                fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data && data.daily) setForecast(data.daily);
+                    })
+                    .catch(err => console.error("Forecast Error:", err));
+            }, [trailId, userLocation]);
+
+            if (!forecast) return <div className="p-6 pb-24 flex justify-center"><div className="animate-pulse text-brand-600 font-bold mt-10">Fetching Local Forecast...</div></div>;
+
+            const locationName = (userLocation && userLocation.length === 2)
+                ? "Your Current Location"
+                : DB.trails[trailId].name;
+
+            return (
+                <div className="p-6 pb-24 animate-fade-in">
+                    <h1 className="text-2xl font-bold mb-2">Local Forecast</h1>
+                    <p className="text-slate-500 text-sm mb-6">3-Day outlook for {locationName}</p>
+                    <div className="space-y-4">
+                        {forecast.time && forecast.time.slice(0, 3).map((date, index) => {
+                            const max = Math.round(forecast.temperature_2m_max[index]);
+                            const min = Math.round(forecast.temperature_2m_min[index]);
+                            const rain = forecast.precipitation_probability_max[index] || "0";
+                            const code = forecast.weather_code[index];
+
+                            const dateObj = new Date(date);
+                            dateObj.setMinutes(dateObj.getMinutes() + dateObj.getTimezoneOffset());
+                            const dateStr = dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+                            let icon = 'cloud';
+                            let color = 'text-slate-400';
+                            let bg = 'bg-slate-50';
+                            let desc = 'Cloudy';
+
+                            if (code === 0 || code === 1) { icon = 'sun'; color = 'text-yellow-600'; bg = 'bg-yellow-50'; desc = 'Clear'; }
+                            else if (code <= 3) { icon = 'cloud'; color = 'text-slate-500'; bg = 'bg-slate-100'; desc = 'Partly Cloudy'; }
+                            else if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) { icon = 'cloud-rain'; color = 'text-blue-600'; bg = 'bg-blue-50'; desc = 'Rain'; }
+                            else if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86)) { icon = 'snowflake'; color = 'text-blue-300'; bg = 'bg-slate-100'; desc = 'Snow'; }
+                            else if (code >= 95) { icon = 'zap'; color = 'text-purple-600'; bg = 'bg-purple-50'; desc = 'Storm'; }
+
+                            return (
+                                <div key={date} className="bg-white p-4 rounded-xl border border-slate-100 flex items-center justify-between shadow-sm">
+                                    <div className="flex items-center gap-4">
+                                        <div className={`p-3 rounded-full ${bg} ${color}`}><Icon name={icon} size={24} /></div>
+                                        <div>
+                                            <div className="font-bold text-slate-900">{dateStr}</div>
+                                            <div className="text-xs text-slate-500">{rain}% Precip • {desc}</div>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="font-bold text-slate-900">{max}°C</div>
+                                        <div className="text-sm text-slate-400">{min}°C</div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    <div className="mt-8 p-4 bg-blue-50 rounded-xl text-xs text-blue-800 border border-blue-100">
+                        <strong>Note:</strong> Mountain weather changes rapidly. Always consult local guides before crossing high passes.
+                    </div>
+                </div>
+            );
+        };
+
+        // --- 4. APP SHELL ---
+        const App = () => {
+            const [view, setView] = useState('home');
+            const [trailId, setTrailId] = useState('ebc');
+
+            const [readinessScore, setReadinessScore] = useState(0);
+            const [readinessAnswers, setReadinessAnswers] = useState({});
+            const [checklist, setChecklist] = useState(INITIAL_CHECKLIST);
+
+            const [metrics, setMetrics] = useState({ alt: 0, dist: '0.0', temp: '--', wind: '--', effO2: 100 });
+            const [userLocation, setUserLocation] = useState(null);
+
+            const lastFetch = useRef({ time: 0, lat: 0, lon: 0, altFetched: false });
+
+            useEffect(() => {
+                const trail = DB.trails[trailId];
+                const startPoint = DB.markers[trailId].find(m => m.type === 'start') || { lat: trail.center[0], lng: trail.center[1] };
+
+                const fetchEnvironmentalData = async (lat, lon, deviceAltitude) => {
+                    try {
+                        const [wRes, eRes] = await Promise.all([
+                            fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,wind_speed_10m`),
+                            deviceAltitude === null ? fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lon}`) : Promise.resolve(null)
+                        ]);
+
+                        const wData = await wRes.json();
+                        let apiAltitude = deviceAltitude;
+
+                        if (eRes) {
+                            const eData = await eRes.json();
+                            if (eData.elevation && eData.elevation.length > 0) {
+                                apiAltitude = Math.round(eData.elevation[0]);
+                            } else {
+                                apiAltitude = 0;
+                            }
+                        }
+
+                        setMetrics(prev => {
+                            const updated = { ...prev };
+                            if (wData && wData.current) {
+                                updated.temp = Math.round(wData.current.temperature_2m);
+                                updated.wind = Math.round(wData.current.wind_speed_10m);
+                            }
+                            if (deviceAltitude === null) {
+                                updated.alt = apiAltitude;
+                                updated.effO2 = calculateEffectiveO2(apiAltitude);
+                            }
+                            return updated;
+                        });
+
+                    } catch (e) {
+                        console.error("Tracking API Error:", e);
+                    }
+                };
+
+                if (!navigator.geolocation) {
+                    console.warn("Geolocation is not supported by this browser.");
+                    return;
+                }
+
+                const geoId = navigator.geolocation.watchPosition(
+                    (pos) => {
+                        const lat = pos.coords.latitude;
+                        const lon = pos.coords.longitude;
+                        setUserLocation([lat, lon]);
+
+                        let deviceAltitude = null;
+                        if (pos.coords.altitude !== null && pos.coords.altitude !== undefined) {
+                            deviceAltitude = Math.round(pos.coords.altitude);
+                        }
+
+                        const walkedDist = calculateDistance(startPoint.lat, startPoint.lng, lat, lon);
+
+                        setMetrics(prev => {
+                            const quickUpdate = { ...prev, dist: walkedDist };
+                            if (deviceAltitude !== null) {
+                                quickUpdate.alt = deviceAltitude;
+                                quickUpdate.effO2 = calculateEffectiveO2(deviceAltitude);
+                            }
+                            return quickUpdate;
+                        });
+
+                        const now = Date.now();
+                        const distMoved = parseFloat(calculateDistance(lastFetch.current.lat, lastFetch.current.lon, lat, lon));
+
+                        if (now - lastFetch.current.time > 120000 || distMoved > 0.1 || (deviceAltitude === null && !lastFetch.current.altFetched)) {
+                            fetchEnvironmentalData(lat, lon, deviceAltitude);
+                            lastFetch.current = { time: now, lat, lon, altFetched: deviceAltitude === null };
+                        }
+                    },
+                    (err) => console.warn("GPS tracking error: ", err),
+                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                );
+
+                return () => navigator.geolocation.clearWatch(geoId);
+            }, [trailId]);
+
+            const NavBtn = ({ id, icon, label }) => (
+                <button onClick={() => setView(id)} className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors ${view === id ? 'text-brand-600' : 'text-slate-400 hover:text-slate-600'}`}>
+                    <Icon name={icon} size={24} className={view === id ? "fill-brand-100" : ""} />
+                    <span className="text-[10px] font-bold">{label}</span>
+                </button>
+            );
+
+            /* CHANGED: Swapped h-screen to h-[100dvh] */
+            return (
+                <div className="h-[100dvh] w-full bg-slate-50 flex flex-col overflow-hidden max-w-md mx-auto shadow-2xl relative">
+                    <main className="flex-1 overflow-y-auto hide-scroll relative bg-slate-50">
+                        {view === 'home' && <Dashboard trailId={trailId} setView={setView} metrics={metrics} readinessScore={readinessScore} />}
+                        {view === 'map' && <MapView trailId={trailId} setTrailId={setTrailId} userLocation={userLocation} />}
+                        {view === 'check' && <SafetyCheck setView={setView} />}
+                        {view === 'readiness' && <Readiness score={readinessScore} setScore={setReadinessScore} answers={readinessAnswers} setAnswers={setReadinessAnswers} checklist={checklist} setChecklist={setChecklist} />}
+                        {view === 'tools' && <Tools />}
+                        {view === 'emergency' && <EmergencyInfo />}
+                        {view === 'weather' && <WeatherView trailId={trailId} userLocation={userLocation} />}
+                    </main>
+
+                    <div className="bg-white border-t border-slate-200 pb-safe z-50 h-[80px]">
+                        <div className="flex justify-around items-center h-full pb-2">
+                            <NavBtn id="home" icon="layout-dashboard" label="Home" />
+                            <NavBtn id="map" icon="map" label="Map" />
+                            <div className="relative -top-5">
+                                <button onClick={() => setView('check')} className="w-14 h-14 bg-slate-900 rounded-full flex items-center justify-center text-white shadow-lg border-4 border-slate-50 active:scale-95 transition-transform hover:bg-brand-600 hover:border-brand-100">
+                                    <Icon name="stethoscope" size={24} />
+                                </button>
+                            </div>
+                            <NavBtn id="tools" icon="grid-2x2" label="Tools" />
+                            <NavBtn id="readiness" icon="shield-check" label="Ready" />
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(
+            <ErrorBoundary>
+                <App />
+            </ErrorBoundary>
+        );
+    </script>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('Latse Service Worker registered!'))
+                    .catch(err => console.error('Service Worker registration failed: ', err));
+            });
+        }
+    </script>
+</body>
+
+</html>
