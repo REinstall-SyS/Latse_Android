@@ -1,0 +1,379 @@
+:root {
+  color-scheme: light;
+  --ink: #293b32;
+  --paper: #fafbf7;
+  --line: #dfe4dc;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font:
+    14px/1.5 system-ui,
+    sans-serif;
+}
+button {
+  font: 500 12px system-ui;
+  min-height: 44px;
+  min-width: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffffff5;
+  color: var(--ink);
+  padding: 10px 14px;
+  cursor: pointer;
+}
+button:focus-visible,
+svg:focus-visible {
+  outline: 2px solid #476b55;
+  outline-offset: 3px;
+}
+header {
+  max-width: 1100px;
+  margin: auto;
+  padding: 28px 24px 24px;
+}
+.brand {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: #73816f;
+  display: flex;
+  justify-content: space-between;
+}
+h1 {
+  font:
+    clamp(30px, 5vw, 60px) / 1.1 Georgia,
+    serif;
+  letter-spacing: -0.03em;
+  margin: 18px 0 10px;
+  max-width: 850px;
+  overflow-wrap: anywhere;
+}
+.region {
+  color: #788276;
+  margin: 0;
+}
+.stats {
+  display: flex;
+  gap: 18px;
+  margin: 18px 0 0;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.stats b {
+  font-weight: 600;
+}
+.stats span + span {
+  border-left: 1px solid var(--line);
+  padding-left: 18px;
+}
+.story {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.map-wrap {
+  position: relative;
+  margin: 0 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+#map {
+  height: min(62vh, 600px);
+  min-height: 330px;
+  background: #edf0e8;
+}
+.leaflet-control-attribution {
+  font-size: 10px !important;
+  background: #ffffffc9 !important;
+}
+.leaflet-control-zoom {
+  border: 1px solid var(--line) !important;
+  box-shadow: 0 2px 8px #243a2b12 !important;
+}
+.leaflet-control-zoom a {
+  width: 40px !important;
+  height: 40px !important;
+  line-height: 40px !important;
+}
+.map-actions {
+  position: absolute;
+  z-index: 500;
+  left: 10px;
+  top: 10px;
+  display: flex;
+  gap: 5px;
+}
+.map-actions button {
+  box-shadow: 0 2px 8px #243a2b10;
+}
+.map-load-state {
+  position: absolute;
+  z-index: 490;
+  top: 60px;
+  left: 10px;
+  right: 54px;
+  width: fit-content;
+  max-width: calc(100% - 64px);
+  border-radius: 5px;
+  padding: 5px 8px;
+  background: #fffdf7eb;
+  color: #667563;
+  font-size: 11px;
+  pointer-events: none;
+}
+.map-load-state[hidden] {
+  display: none;
+}
+.photo-marker {
+  background: none;
+  border: 0;
+}
+.photo-pin {
+  width: 48px;
+  height: 54px;
+  padding: 3px 3px 11px;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 2px 9px #18352633;
+  position: relative;
+  border: 1px solid #fff;
+}
+.photo-pin:after {
+  content: "";
+  position: absolute;
+  bottom: -5px;
+  left: 19px;
+  border: 5px solid transparent;
+  border-top-color: white;
+  border-bottom: 0;
+}
+.photo-pin img {
+  width: 40px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 3px;
+}
+.photo-pin span {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  font: 10px system-ui;
+  text-align: center;
+  color: #234031;
+}
+.note-pin {
+  height: 26px;
+  width: 26px;
+  left: 11px;
+  top: 23px;
+  border-radius: 50%;
+  padding: 0;
+}
+.note-pin:after {
+  display: none;
+}
+.note-pin span {
+  top: 4px;
+}
+.moment-card {
+  position: absolute;
+  z-index: 600;
+  bottom: 18px;
+  left: 10px;
+  right: 10px;
+  max-width: 500px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  background: #fffffff5;
+  border: 1px solid #e3e7de;
+  border-radius: 10px;
+  padding: 10px;
+  box-shadow: 0 4px 18px #19372516;
+}
+.moment-card[hidden],
+img[hidden] {
+  display: none;
+}
+.moment-card img {
+  width: 84px;
+  height: 84px;
+  object-fit: cover;
+  border-radius: 5px;
+}
+.moment-card > div {
+  min-width: 0;
+  padding-right: 24px;
+}
+.moment-card p {
+  margin: 0 0 5px;
+  font:
+    17px/1.25 Georgia,
+    serif;
+  overflow-wrap: anywhere;
+  max-height: 85px;
+  overflow: auto;
+}
+.moment-card small {
+  font-size: 11px;
+  color: #74816f;
+  display: block;
+}
+.moment-card button {
+  position: absolute;
+  right: 0;
+  top: 0;
+  border: 0;
+  background: none;
+  font-size: 20px;
+  padding: 0;
+  width: 44px;
+}
+.replay[hidden],
+#download[hidden] {
+  display: none;
+}
+.replay {
+  padding: 12px 20px 4px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.replay svg {
+  min-width: 40px;
+  flex: 1;
+  height: 44px;
+  touch-action: none;
+  cursor: crosshair;
+}
+.replay span {
+  font-size: 11px;
+  min-width: 80px;
+  text-align: right;
+}
+.moments-label {
+  padding: 10px 24px 4px;
+  font-size: 11px;
+  color: #788371;
+}
+.notes {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 20px 20px;
+  scrollbar-width: thin;
+}
+.moment-button {
+  width: 112px;
+  flex: 0 0 112px;
+  padding: 4px;
+  border-radius: 7px;
+  text-align: left;
+  background: white;
+}
+.moment-button img {
+  width: 100%;
+  height: 70px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+.moment-button span {
+  display: block;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 3px 2px 1px;
+}
+.moment-button[aria-pressed="true"] {
+  border-color: #60785d;
+  box-shadow: inset 0 0 0 1px #60785d;
+}
+.foot {
+  align-items: flex-start;
+  max-width: 1100px;
+  margin: auto;
+  padding: 0 24px 24px;
+  color: #808374;
+  font-size: 11px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.foot button {
+  flex-shrink: 0;
+  max-width: 150px;
+}
+.foot p {
+  margin: 5px 0;
+}
+.foot a {
+  color: inherit;
+}
+.privacy {
+  padding: 8px 24px;
+  font-size: 12px;
+  color: #8a633e;
+}
+.empty-moments {
+  padding: 0 24px 20px;
+  color: #7b806f;
+  font-size: 12px;
+}
+@media (max-width: 480px) {
+  header {
+    padding: 22px 18px 16px;
+  }
+  h1 {
+    font-size: 34px;
+  }
+  .map-wrap {
+    margin: 0 10px;
+  }
+  #map {
+    height: 51vh;
+  }
+  .replay {
+    padding: 10px 12px 0;
+    gap: 8px;
+  }
+  .replay span {
+    min-width: 66px;
+  }
+  .map-actions button {
+    padding: 8px 12px;
+    font-size: 11px;
+  }
+  .stats {
+    gap: 12px;
+  }
+  .stats span + span {
+    padding-left: 12px;
+  }
+}
+
+.map-style-menu {
+  position: absolute;
+  top: 60px;
+  left: 10px;
+  z-index: 650;
+  display: flex;
+  gap: 4px;
+  padding: 5px;
+  background: #fff;
+  border: 1px solid #dfe4dc;
+  border-radius: 8px;
+  box-shadow: 0 3px 14px #21362718;
+}
+.map-style-menu[hidden] {
+  display: none;
+}
+.map-style-menu button[aria-pressed="true"] {
+  background: #e8eee2;
+  border-color: #79906d;
+}
