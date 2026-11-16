@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Latse test fixture" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>Creek Ridge verification</name><trkseg>
+    <trkpt lat="30.70" lon="-89.10"><ele>50</ele><time>2025-09-14T07:00:00Z</time></trkpt>
+    <trkpt lat="30.71" lon="-89.10"><ele>90</ele><time>2025-09-14T07:20:00Z</time></trkpt>
+    <trkpt lat="30.72" lon="-89.10"><ele>140</ele><time>2025-09-14T07:40:00Z</time></trkpt>
+    <trkpt lat="30.73" lon="-89.10"><ele>80</ele><time>2025-09-14T08:00:00Z</time></trkpt>
+  </trkseg></trk>
+</gpx>

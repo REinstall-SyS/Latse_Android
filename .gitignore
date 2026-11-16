@@ -1,9 +1,17 @@
+# Local dependencies, builds, and test artifacts
+/node_modules/
+/dist/
+/playwright-report/
+/test-results/
+.artifacts/
+
 # Built application files
 *.apk
 *.aab
 *.ap_
 *.dex
 *.class
+/android/app/release/
 
 # Android Studio Navigation editor temp files
 .navigation/
@@ -21,6 +29,9 @@ captures/
 
 # Local configuration file (SDK path, etc)
 local.properties
+.env
+.env.*
+*.local
 
 # IDE settings
 .idea/
@@ -31,6 +42,12 @@ local.properties
 *.jks
 *.keystore
 *.pepk
+*.p12
+*.pfx
+*.pem
+*.key
+signing.properties
+keystore.properties
 
 # Google Services (if you add Firebase later)
 google-services.json

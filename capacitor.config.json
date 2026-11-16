@@ -1,5 +1,5 @@
 {
   "appId": "com.bhariya.app",
-  "appName": "Bhariya",
-  "webDir": "www"
+  "appName": "Latse",
+  "webDir": "dist"
 }
